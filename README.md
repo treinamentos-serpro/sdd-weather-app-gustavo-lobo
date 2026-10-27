@@ -102,6 +102,127 @@ Decisões-chave:
 
 ---
 
+## Dados fictícios para desenvolver a UI
+
+Os contratos estão em [src/types/weather.ts](src/types/weather.ts). Para desenvolver
+componentes sem acessar a API, importe o objeto tipado:
+
+```ts
+import { mockWeatherData } from './mocks/weather';
+```
+
+O caminho acima considera um arquivo diretamente em `src/`. O mock está em
+[src/mocks/weather.ts](src/mocks/weather.ts) e contém São Paulo, clima atual e
+exatamente cinco dias consecutivos, de 27 a 31 de outubro de 2026. São dados
+fictícios com datas fixas, não uma previsão real nem atualizada automaticamente.
+Temperaturas ficam em Celsius, horários em UTC e datas diárias no fuso
+`America/Sao_Paulo`; converta e formate apenas na apresentação. O mock não é
+um fallback automático para falhas da API.
+
+## Componente de busca
+
+[SearchBar](src/components/SearchBar.tsx) implementa o formulário previsto como
+`CitySearch` no plano, com o nome solicitado para a UI. Recebe
+`onSearch(city: string)` e `disabled` opcional (padrão `false`). Remove apenas
+espaços nas extremidades, rejeita buscas vazias com uma orientação acessível e
+permite envio pelo botão ou Enter. Não acessa a API; a integração fica a cargo
+do callback. `disabled` bloqueia o campo, o botão e o envio do formulário.
+
+## Controle de unidade
+
+[UnitToggle](src/components/UnitToggle.tsx) implementa o controle previsto como
+`TemperatureUnitToggle` no plano. Recebe `unit: Unit` e `onChange(unit: Unit)`,
+sem estado interno, conversão ou acesso à API. Os botões `°C` e `°F` indicam a
+seleção com `aria-pressed` dentro do grupo “Unidade de temperatura”.
+Use Tab/Shift+Tab para navegar e Enter/Espaço para ativar; o componente pai deve
+atualizar a prop `unit` ao receber o callback.
+
+## Condições atuais
+
+[CurrentWeather](src/components/CurrentWeather.tsx) recebe `city: City`,
+`current: CurrentWeather` e `unit: Unit`. Exibe temperatura, condição com ícone
+acessível e métricas em layout responsivo glassmorphism, sem acessar a API.
+Valores ausentes aparecem como “Indisponível”; zero continua sendo uma medição.
+
+O componente usa [temperature](src/lib/temperature.ts) para conversão sem
+arredondamento, [weatherFormat](src/lib/weatherFormat.ts) para formatação na
+localidade do dispositivo e [weatherCodes](src/lib/weatherCodes.ts) para ícones.
+Este último também exporta `getWeatherCondition(code)` para normalizar códigos
+WMO, incluindo a condição genérica para códigos desconhecidos.
+
+Como estas props não incluem `timezone`, `fetchedAt` ou `issues`, a apresentação
+dos horários no fuso da cidade e dos avisos de validação fica para a integração,
+sem inferir o horário meteorológico a partir do momento da renderização.
+
+## Previsão diária
+
+[ForecastList](src/components/ForecastList.tsx) recebe `forecast: ForecastDay[]`
+e `unit: Unit` e renderiza a sequência recebida em um grid de 2/3/5 colunas
+(base/`sm`/`lg`). A validação dos cinco dias cabe à camada de dados; a lista não
+inventa nem descarta datas. Uma lista vazia mostra “Previsão indisponível”.
+
+[ForecastCard](src/components/ForecastCard.tsx) recebe `day: ForecastDay` e
+`unit: Unit`. Cada cartão exibe data, condição com ícone acessível, máxima,
+mínima, probabilidade de chuva e precipitação diária. Medições ausentes são
+explicitamente indisponíveis. O helper `formatDayLabel` em
+[format](src/lib/format.ts) formata a data civil na localidade do dispositivo
+sem deslocá-la pelo fuso do navegador; não usa o relógio para inventar “hoje”.
+
+## Estados de apresentação
+
+Os componentes em [states](src/components/states/) são independentes da rede:
+
+- [LoadingState](src/components/states/LoadingState.tsx): `role="status"`,
+  mensagem opcional `message` (padrão “Carregando dados…”) e indicador animado
+  apenas quando o dispositivo não solicita movimento reduzido.
+- [ErrorState](src/components/states/ErrorState.tsx): `message` obrigatória,
+  anunciada como alerta, e botão “Tentar novamente” que chama `onRetry`.
+  A prop opcional `disabled` bloqueia a nova tentativa.
+- [EmptyState](src/components/states/EmptyState.tsx): `role="status"`, título
+  `title` e dica `hint` opcionais, com padrões para busca sem resultados.
+  Na consulta meteorológica, forneça textos com cidade/período preservados.
+
+Use mensagens específicas à operação e voltadas ao usuário, sem expor erros
+brutos da API. O componente pai controla qual estado exibir e quando liberar
+uma nova tentativa.
+
+## Executar o layout de demonstração
+
+Execute `pnpm dev` e abra a URL indicada pelo Vite. A composição está em
+[App](src/App.tsx), com entrada em [main](src/main.tsx) e estilos globais em
+[index.css](src/index.css).
+
+O estado inicial orienta a busca. Enviar qualquer cidade abre o mock fixo de
+São Paulo — não representa geocodificação nem altera a cidade do exemplo.
+O painel “Estado de demonstração” permite alternar entre inicial, carregando,
+sem resultados, erro e sucesso. O carregamento permanece visível até escolher
+outro estado; “Tentar novamente” abre o sucesso simulado. Não há chamadas à API
+nem atrasos artificiais. Estes controles são exclusivos desta etapa de UI,
+não uma implementação dos fluxos reais de consulta.
+
+A unidade começa em Celsius e permanece no estado de UI ao alternar cenários.
+As onze temperaturas são convertidas pelos componentes na renderização, sem
+modificar o mock. Referência meteorológica, consulta e intervalo de precipitação
+são apresentados separadamente no fuso do exemplo.
+
+### Acessibilidade e responsividade
+
+- Busca inválida mantém a mensagem associada ao campo e leva o foco para ele.
+- A recuperação de erro move o foco para o conteúdo, sem perdê-lo quando o
+  botão desaparece. O link “Ir para o conteúdo” também alcança essa região.
+- O sucesso e a troca de unidade têm anúncio resumido em uma região viva.
+  Botões ativos usam sublinhado além de cor e `aria-pressed`.
+- Textos longos quebram sem ocultar conteúdo; o grid mantém 2/3/5 colunas.
+  Sem suporte a blur, os painéis usam um fundo sólido escuro.
+- Contraste calculado pela luminância WCAG, considerando o fundo mais claro do
+  gradiente e o painel branco a 5%: borda do campo 6,17:1 (antes 1,53:1),
+  foco sobre painel 6,20:1, texto secundário sobre painel 10,65:1 e texto do
+  botão no hover 5,39:1. Emojis dependem da renderização do sistema; a condição
+  também é apresentada em texto.
+- Testes E2E cobrem teclado, movimento reduzido e textos de 80 caracteres em
+  320, 375, 640, 768, 1024 e 1440 px. Isso não substitui avaliação com leitor
+  de tela real nem certifica conformidade integral com WCAG.
+
 ## Stack
 
 - **TypeScript** (strict) · **React** · **Vite**

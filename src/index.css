@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    min-width: 320px;
+    background-color: #0b1020;
+    color: #fff;
+    font-family: Inter, system-ui, sans-serif;
+    overflow-wrap: anywhere;
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .backdrop-blur-md {
+    background-color: #1a2138;
+  }
+}
