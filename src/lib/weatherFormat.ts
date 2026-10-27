@@ -1,10 +1,10 @@
 export function formatMeasurement(
-  value: number | null,
+  value: number | null | undefined,
   fractionDigits: number,
   unit: string,
   locale?: string,
 ): string {
-  if (value === null) return 'Indisponível';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   const formatted = new Intl.NumberFormat(locale, {
     useGrouping: false,
     minimumFractionDigits: fractionDigits,

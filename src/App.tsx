@@ -20,12 +20,14 @@ export default function App() {
   }
 
   function formatTime(instant: string | null): string {
-    if (instant === null || data === null) return 'Indisponível';
+    if (instant === null || data === null) return '—';
+    const date = new Date(instant);
+    if (Number.isNaN(date.getTime())) return '—';
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'short',
       timeStyle: 'short',
       timeZone: data.timezone,
-    }).format(new Date(instant));
+    }).format(date);
   }
 
   return (
@@ -120,7 +122,7 @@ export default function App() {
                   Intervalo da precipitação:{' '}
                   {data.current.precipitationPeriod
                     ? `${formatTime(data.current.precipitationPeriod.start)} – ${formatTime(data.current.precipitationPeriod.end)}`
-                    : 'Indisponível'}
+                    : '—'}
                 </p>
                 <p>Fuso horário: {data.timezone}</p>
               </div>

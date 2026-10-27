@@ -8,8 +8,14 @@ export class WeatherServiceError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 10_000;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isAbortError(value: unknown): boolean {
+  return isRecord(value) && value.name === 'AbortError';
 }
 
 function isNumber(value: unknown): value is number {
@@ -22,39 +28,63 @@ function isTimestamp(value: unknown): value is number {
   );
 }
 
-export async function fetchWithTimeout(url: string): Promise<Response> {
+async function requestWithTimeout<T>(
+  url: string,
+  operation: string,
+  readResponse: (response: Response) => Promise<T>,
+): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, { signal: controller.signal });
+    return await readResponse(response);
   } catch (cause) {
-    const message =
-      isRecord(cause) && cause.name === 'AbortError'
-        ? 'A requisição demorou demais.'
-        : 'Falha de rede.';
+    if (cause instanceof WeatherServiceError) throw cause;
+
+    const message = timedOut || isAbortError(cause)
+      ? `A ${operation} excedeu o tempo limite de 10 segundos. Verifique sua conexão e tente novamente.`
+      : `Não foi possível concluir a ${operation} por falha de rede. Verifique sua conexão e tente novamente.`;
     throw new WeatherServiceError(message, { cause });
   } finally {
     clearTimeout(timeout);
   }
 }
 
+export function fetchWithTimeout(url: string): Promise<Response> {
+  return requestWithTimeout(url, 'requisição', async (response) => response);
+}
+
 async function fetchJson(url: string, operation: string): Promise<Record<string, unknown>> {
-  const response = await fetchWithTimeout(url);
-  if (!response.ok) {
-    throw new WeatherServiceError(
-      `Erro ao ${operation} (HTTP ${response.status}). Tente novamente.`,
-    );
-  }
-  let data: unknown;
-  try {
-    data = await response.json();
-  } catch (cause) {
-    throw new WeatherServiceError(`Resposta inválida ao ${operation}.`, { cause });
-  }
-  if (!isRecord(data)) {
-    throw new WeatherServiceError(`Resposta inválida ao ${operation}.`);
-  }
-  return data;
+  const operationLabel = operation === 'buscar cidades' ? 'busca por cidades' : 'consulta do clima';
+  return requestWithTimeout(url, operationLabel, async (response) => {
+    if (!response.ok) {
+      const message =
+        response.status === 429
+          ? `O serviço recebeu muitas solicitações durante a ${operationLabel}. Tente novamente em instantes.`
+          : response.status >= 500
+            ? `O serviço está temporariamente indisponível durante a ${operationLabel}. Tente novamente.`
+            : `Não foi possível concluir a ${operationLabel} (erro HTTP ${response.status}). Tente novamente.`;
+      throw new WeatherServiceError(message);
+    }
+
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch (cause) {
+      if (isAbortError(cause)) throw cause;
+      throw new WeatherServiceError(`A resposta recebida durante a ${operationLabel} é inválida.`, {
+        cause,
+      });
+    }
+    if (!isRecord(data)) {
+      throw new WeatherServiceError(`A resposta recebida durante a ${operationLabel} é inválida.`);
+    }
+    return data;
+  });
 }
 
 export async function searchCities(name: string): Promise<City[]> {
@@ -73,8 +103,6 @@ export async function searchCities(name: string): Promise<City[]> {
     if (
       !isRecord(result) ||
       !isNumber(result.id) ||
-      typeof result.name !== 'string' ||
-      typeof result.country !== 'string' ||
       !isNumber(result.latitude) ||
       !isNumber(result.longitude)
     ) {
@@ -82,8 +110,11 @@ export async function searchCities(name: string): Promise<City[]> {
     }
     return {
       id: result.id,
-      name: result.name,
-      country: result.country,
+      name:
+        typeof result.name === 'string' && result.name.trim()
+          ? result.name
+          : 'Cidade indisponível',
+      country: typeof result.country === 'string' && result.country.trim() ? result.country : null,
       latitude: result.latitude,
       longitude: result.longitude,
       admin1: typeof result.admin1 === 'string' ? result.admin1 : null,
@@ -111,12 +142,8 @@ export async function getWeather(city: City): Promise<WeatherData> {
     `https://api.open-meteo.com/v1/forecast?${params}`,
     'consultar o clima',
   );
-  if (!isRecord(data.current) || !isRecord(data.daily)) {
-    throw new WeatherServiceError(
-      'Resposta incompleta ao consultar o clima: current ou daily ausente.',
-    );
-  }
-  const { current, daily } = data;
+  const current = isRecord(data.current) ? data.current : {};
+  const daily = isRecord(data.daily) ? data.daily : {};
   if (typeof data.timezone !== 'string') {
     throw new WeatherServiceError(
       'Resposta incompleta ao consultar o clima: fuso horário ausente.',
@@ -140,12 +167,9 @@ export async function getWeather(city: City): Promise<WeatherData> {
       },
     );
   }
-  if (!Array.isArray(daily.time) || daily.time.length < 5) {
-    throw new WeatherServiceError(
-      'Resposta incompleta ao consultar o clima: previsão de cinco dias ausente.',
-    );
-  }
   const issues: WeatherDataIssue[] = [];
+  if (!isRecord(data.current)) issues.push({ path: 'current', kind: 'invalid-block' });
+  if (!isRecord(data.daily)) issues.push({ path: 'daily', kind: 'invalid-block' });
   const measurement = (value: unknown, path: string): number | null => {
     if (isNumber(value)) return value;
     issues.push({ path, kind: 'invalid-field' });
@@ -155,19 +179,29 @@ export async function getWeather(city: City): Promise<WeatherData> {
     const code = measurement(value, path);
     return code === null ? null : getWeatherCondition(code);
   };
-  const forecast: ForecastDay[] = daily.time.slice(0, 5).map((time: unknown, index: number) => {
+  const dailyTimes = Array.isArray(daily.time) ? daily.time.slice(0, 5) : [];
+  if (isRecord(data.daily) && (!Array.isArray(daily.time) || dailyTimes.length < 5)) {
+    issues.push({ path: 'daily.time', kind: 'invalid-block' });
+  }
+  const forecast: ForecastDay[] = dailyTimes.flatMap((time: unknown, index: number) => {
     if (!isTimestamp(time)) {
-      throw new WeatherServiceError(
-        'Resposta inválida ao consultar o clima: data diária inválida.',
-      );
+      issues.push({ path: `daily.time[${index}]`, kind: 'invalid-field' });
+      return [];
     }
     const parts = dateFormatter.formatToParts(new Date(time * 1000));
     const part = (type: Intl.DateTimeFormatPartTypes) =>
       parts.find((entry) => entry.type === type)?.value;
+    const year = part('year');
+    const month = part('month');
+    const day = part('day');
+    if (!year || !month || !day) {
+      issues.push({ path: `daily.time[${index}]`, kind: 'invalid-field' });
+      return [];
+    }
     const value = (field: string) =>
       Array.isArray(daily[field]) ? daily[field][index] : undefined;
-    return {
-      date: `${part('year')}-${part('month')}-${part('day')}`,
+    return [{
+      date: `${year}-${month}-${day}`,
       minTemperatureC: measurement(
         value('temperature_2m_min'),
         `daily.temperature_2m_min[${index}]`,
@@ -185,10 +219,12 @@ export async function getWeather(city: City): Promise<WeatherData> {
         value('precipitation_probability_max'),
         `daily.precipitation_probability_max[${index}]`,
       ),
-    };
+    }];
   });
   const time = isTimestamp(current.time) ? current.time : null;
-  if (time === null) issues.push({ path: 'current', kind: 'invalid-block' });
+  if (time === null && isRecord(data.current)) {
+    issues.push({ path: 'current.time', kind: 'invalid-field' });
+  }
   let precipitationPreviousHourMm: number | null = null;
   let precipitationPeriod: WeatherData['current']['precipitationPeriod'] = null;
   if (time !== null && isRecord(data.hourly) && Array.isArray(data.hourly.time)) {
@@ -214,8 +250,7 @@ export async function getWeather(city: City): Promise<WeatherData> {
     }
   }
   if (precipitationPeriod === null) issues.push({ path: 'hourly', kind: 'invalid-block' });
-  const currentValue = (field: string) =>
-    time === null ? null : measurement(current[field], `current.${field}`);
+  const currentValue = (field: string) => measurement(current[field], `current.${field}`);
   return {
     city,
     timezone: data.timezone,
@@ -223,7 +258,7 @@ export async function getWeather(city: City): Promise<WeatherData> {
     current: {
       referenceTime: time === null ? null : new Date(time * 1000).toISOString(),
       temperatureC: currentValue('temperature_2m'),
-      condition: time === null ? null : condition(current.weather_code, 'current.weather_code'),
+      condition: condition(current.weather_code, 'current.weather_code'),
       relativeHumidityPct: currentValue('relative_humidity_2m'),
       windSpeedKmh: currentValue('wind_speed_10m'),
       surfacePressureHpa: currentValue('surface_pressure'),

@@ -52,7 +52,12 @@ describe('formatTemperature', () => {
   });
 
   it.each(['celsius', 'fahrenheit'] as const)('mostra ausência de medição em %s', (unit) => {
-    expect(formatTemperature(null, unit, 'pt-BR')).toBe('Indisponível');
+    expect(formatTemperature(null, unit, 'pt-BR')).toBe('—');
+  });
+
+  it('não exibe valores não finitos como temperatura', () => {
+    expect(formatTemperature(Number.NaN, 'celsius', 'pt-BR')).toBe('—');
+    expect(formatTemperature(Number.POSITIVE_INFINITY, 'fahrenheit', 'pt-BR')).toBe('—');
   });
 
   it('usa o locale do dispositivo quando omitido', () => {

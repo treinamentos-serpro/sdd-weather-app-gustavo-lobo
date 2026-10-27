@@ -66,7 +66,9 @@ export default function useWeather() {
       const error =
         cause instanceof WeatherServiceError
           ? cause.message
-          : 'Não foi possível concluir a consulta. Tente novamente.';
+          : operation.type === 'search'
+            ? 'Não foi possível concluir a busca por cidades. Tente novamente.'
+            : 'Não foi possível concluir a consulta do clima. Tente novamente.';
       setState((previous) => ({ ...previous, status: 'error', error }));
     }
   }, []);

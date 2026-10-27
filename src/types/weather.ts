@@ -4,7 +4,7 @@ export interface City {
   id: number;
   name: string;
   admin1: string | null;
-  country: string;
+  country: string | null;
   countryCode: string | null;
   latitude: number;
   longitude: number;

@@ -94,6 +94,26 @@ describe('searchCities', () => {
     );
   });
 
+  it('mapeia país e nome ausentes para fallbacks seguros', async () => {
+    respond({
+      results: [
+        { id: 2, latitude: 0, longitude: 0 },
+      ],
+    });
+
+    await expect(searchCities('Local desconhecido')).resolves.toEqual([
+      {
+        id: 2,
+        name: 'Cidade indisponível',
+        country: null,
+        latitude: 0,
+        longitude: 0,
+        admin1: null,
+        countryCode: null,
+      },
+    ]);
+  });
+
   it.each([{}, { results: [] }])('retorna lista vazia quando não há resultados', async (data) => {
     respond(data);
     await expect(searchCities('Recife')).resolves.toEqual([]);
@@ -252,11 +272,21 @@ describe('getWeather', () => {
     });
   });
 
-  it.each(['current', 'daily'])('rejeita bloco %s ausente ou nulo', async (block) => {
+  it.each(['current', 'daily'])('mapeia bloco %s ausente ou nulo sem expor valores indefinidos', async (block) => {
     for (const value of [undefined, null]) {
       respond({ ...forecastResponse(), [block]: value });
-      await expect(getWeather(city)).rejects.toThrow(/Resposta incompleta/);
-      await expect(getWeather(city)).rejects.toBeInstanceOf(WeatherServiceError);
+      const result = await getWeather(city);
+      if (block === 'current') {
+        expect(result.current.temperatureC).toBeNull();
+        expect(result.current.relativeHumidityPct).toBeNull();
+        expect(result.current.windSpeedKmh).toBeNull();
+        expect(result.current.surfacePressureHpa).toBeNull();
+        expect(result.current.condition).toBeNull();
+      } else {
+        expect(result.forecast).toEqual([]);
+      }
+      expect(JSON.stringify(result)).not.toContain('undefined');
+      expect(result.issues).toContainEqual({ path: block, kind: 'invalid-block' });
     }
   });
 
@@ -305,21 +335,33 @@ describe('getWeather', () => {
     }
   });
 
-  it('não inventa medições quando o instante atual é inválido', async () => {
+  it('preserva medições atuais mesmo quando o instante atual é inválido', async () => {
     const data = forecastResponse();
     respond({ ...data, current: { ...data.current, time: null } });
     const result = await getWeather(city);
-    expect(Object.values(result.current).every((value) => value === null)).toBe(true);
+    expect(result.current.referenceTime).toBeNull();
+    expect(result.current.temperatureC).toBe(data.current.temperature_2m);
+    expect(result.current.relativeHumidityPct).toBe(data.current.relative_humidity_2m);
+    expect(result.current.condition?.code).toBe(data.current.weather_code);
     expect(result.forecast).toHaveLength(5);
-    expect(result.issues).toContainEqual({ path: 'current', kind: 'invalid-block' });
+    expect(result.issues).toContainEqual({ path: 'current.time', kind: 'invalid-field' });
+  });
+
+  it('preserva dias com datas válidas e ignora datas diárias ausentes ou inválidas', async () => {
+    respond({
+      ...forecastResponse(),
+      daily: { ...forecastResponse().daily, time: [1793070000, null, 1793242800] },
+    });
+    const result = await getWeather(city);
+    expect(result.forecast.map((day) => day.date)).toEqual(['2026-10-27', '2026-10-29']);
+    expect(result.issues).toContainEqual({ path: 'daily.time[1]', kind: 'invalid-field' });
+    expect(result.issues).toContainEqual({ path: 'daily.time', kind: 'invalid-block' });
   });
 
   it.each([
-    { daily: { time: [] } },
-    { daily: { time: [null, null, null, null, null] } },
     { timezone: 'invalid/timezone' },
     { timezone: null },
-  ])('rejeita contexto temporal incompleto ou inválido', async (override) => {
+  ])('rejeita fuso horário ausente ou inválido', async (override) => {
     respond({ ...forecastResponse(), ...override });
     await expect(getWeather(city)).rejects.toBeInstanceOf(WeatherServiceError);
   });
@@ -343,7 +385,7 @@ describe.each([
     fetchMock.mockRejectedValue(cause);
     await expect(operation()).rejects.toMatchObject({
       name: 'WeatherServiceError',
-      message: 'Falha de rede.',
+      message: expect.stringContaining('falha de rede.'),
       cause,
     });
   });
@@ -366,7 +408,8 @@ describe('fetchWithTimeout', () => {
     const request = fetchWithTimeout('https://example.test');
     const rejection = expect(request).rejects.toMatchObject({
       name: 'WeatherServiceError',
-      message: 'A requisição demorou demais.',
+      message:
+        'A requisição excedeu o tempo limite de 10 segundos. Verifique sua conexão e tente novamente.',
     });
     await vi.advanceTimersByTimeAsync(9999);
     expect(signal?.aborted).toBe(false);
@@ -381,7 +424,37 @@ describe('fetchWithTimeout', () => {
     await fetchWithTimeout('https://example.test');
     expect(vi.getTimerCount()).toBe(0);
     fetchMock.mockRejectedValue(new TypeError('Network'));
-    await expect(fetchWithTimeout('https://example.test')).rejects.toThrow('Falha de rede.');
+    await expect(fetchWithTimeout('https://example.test')).rejects.toThrow(
+      'por falha de rede. Verifique sua conexão e tente novamente.',
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('mantém o timeout ativo durante a leitura do corpo JSON', async () => {
+    let signal: AbortSignal | undefined;
+    const response = Response.json({});
+    Object.defineProperty(response, 'json', {
+      value: () =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        }),
+    });
+    fetchMock.mockImplementation((_url, options) => {
+      signal = options?.signal ?? undefined;
+      return Promise.resolve(response);
+    });
+
+    const request = searchCities('Recife');
+    const rejection = expect(request).rejects.toMatchObject({
+      name: 'WeatherServiceError',
+      message:
+        'A busca por cidades excedeu o tempo limite de 10 segundos. Verifique sua conexão e tente novamente.',
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejection;
+    expect(signal?.aborted).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   });
 });

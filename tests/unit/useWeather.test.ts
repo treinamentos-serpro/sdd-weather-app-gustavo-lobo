@@ -77,13 +77,18 @@ describe('useWeather', () => {
     expect(weatherMock).not.toHaveBeenCalled();
   });
 
-  it('repete o termo enviado quando a busca falha', async () => {
-    searchMock.mockRejectedValueOnce(new WeatherServiceError('Falha de rede.'));
+  it('repete o termo enviado após falha offline simulada', async () => {
+    searchMock.mockRejectedValueOnce(
+      new WeatherServiceError(
+        'Não foi possível concluir a busca por cidades por falha de rede. Verifique sua conexão e tente novamente.',
+      ),
+    );
     const { result } = renderHook(() => useWeather());
     await act(() => result.current.search('Recife'));
     expect(result.current).toMatchObject({
       status: 'error',
-      error: 'Falha de rede.',
+      error:
+        'Não foi possível concluir a busca por cidades por falha de rede. Verifique sua conexão e tente novamente.',
       query: 'Recife',
     });
     await act(() => result.current.retry());

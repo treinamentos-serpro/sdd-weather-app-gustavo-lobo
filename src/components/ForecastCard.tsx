@@ -35,7 +35,9 @@ export default function ForecastCard({ day, unit }: ForecastCardProps) {
       className="h-full min-w-0 rounded-2xl border border-white/10 bg-white/5 p-4 text-white shadow-glass backdrop-blur-md"
     >
       <h3 id={headingId} className="font-semibold">
-        <time dateTime={day.date}>{formatDayLabel(day.date)}</time>
+        <time dateTime={formatDayLabel(day.date) === '—' ? undefined : day.date}>
+          {formatDayLabel(day.date)}
+        </time>
       </h3>
       <span role="img" aria-label={conditionLabel} className="mt-4 block text-4xl text-sun">
         {weatherIcons[day.condition?.iconKey ?? 'unknown']}

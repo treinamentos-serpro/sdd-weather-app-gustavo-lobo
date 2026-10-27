@@ -9,6 +9,13 @@ describe('formatDayLabel', () => {
     expect(formatDayLabel('2026-10-27', 'en-US')).toBe('Tue, 10/27');
   });
 
+  it.each([null, undefined, '', 'not-a-date', '2026-02-30'])(
+    'usa fallback para data ausente ou inválida: %s',
+    (date) => {
+      expect(formatDayLabel(date)).toBe('—');
+    },
+  );
+
   it.each([
     ['2026-10-25', 'dom., 25/10'],
     ['2026-10-26', 'seg., 26/10'],

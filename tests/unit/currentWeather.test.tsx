@@ -67,7 +67,7 @@ describe('CurrentWeather', () => {
     };
     render(<CurrentWeather city={mockWeatherData.city} current={empty} unit="fahrenheit" />);
 
-    expect(screen.getAllByText('Indisponível', { exact: true })).toHaveLength(4);
+    expect(screen.getAllByText('—', { exact: true })).toHaveLength(4);
     expect(screen.getByRole('img', { name: 'Condição indisponível' })).toHaveTextContent('❔');
     expect(screen.getByText(`${formatted(0, 1)} mm`)).toBeInTheDocument();
     expect(screen.queryByText(/°F/)).not.toBeInTheDocument();

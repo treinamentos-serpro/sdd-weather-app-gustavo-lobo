@@ -71,7 +71,7 @@ describe('ForecastCard', () => {
       />,
     );
 
-    expect(screen.getAllByText('Indisponível', { exact: true })).toHaveLength(3);
+    expect(screen.getAllByText('—', { exact: true })).toHaveLength(3);
     expect(screen.getByRole('img', { name: 'Condição indisponível' })).toHaveTextContent('❔');
     expect(screen.getByText('0%')).toBeInTheDocument();
     expect(screen.queryByText(/°F/)).not.toBeInTheDocument();
