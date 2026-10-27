@@ -38,6 +38,37 @@ O mapeamento abaixo refere-se à revisão de granularidade anterior.
 | T-33 | Misturava atribuição UI, configuração e verificação da publicação | T-62 a T-64 |
 | T-34 | Execução dos gates e fechamento de rastreabilidade | T-65 / T-66 |
 
+## Revisão de edge cases — 2026-10-27
+
+Cobertura ampliada sem mudanças em produção, priorizando:
+
+- CA-05b: valores exatos 0 → 32, 100 → 212 e -40 → -40 nas onze
+  temperaturas da tela, com alternâncias sem mutação nem novas consultas.
+- CA-06a/06b: falha de rede do geocoding e retry do termo enviado após
+  editar o input; erros HTTP 400/429/500/503 sem retry automático; falha
+  após sucesso remove dados anteriores em vez de apresentá-los como atuais.
+- CA-07b: campos atuais e arrays diários ausentes/malformados, preservação
+  de indicadores válidos, zero real versus indisponível e aviso na UI;
+  código WMO desconhecido com ícone acessível no fluxo completo.
+- CA-08a: datas locais em UTC+14 na virada do ano e em Nova York na
+  transição de horário de verão, sem deslocamento fixo do offset.
+- CA-11: timeout real do serviço no navegador com relógio controlado,
+  encerramento de loading e recuperação por retry.
+- Recorte aprovado: `current`/`daily` ausentes geram erro e retry no
+  navegador; não se exige sucesso parcial entre blocos neste recorte.
+
+Evidências: `pnpm lint`, `pnpm build` e `pnpm test` aprovados
+(149 testes em 13 arquivos); `pnpm test:e2e -- tests/e2e/weather.spec.ts`
+aprovado (20 execuções nos projetos chromium/mobile).
+
+Lacunas remanescentes: timeout durante leitura do corpo HTTP; datas diárias
+duplicadas/fora de ordem e faixas físicas inválidas; homônimas com o mesmo
+nome no fluxo E2E; apresentação completa em outro locale/fuso de navegador.
+Espera por `Retry-After`, política de cache/frescor, matriz de plataformas
+e avaliações de acessibilidade/desempenho/disponibilidade seguem pendentes
+de implementação ou decisões próprias; testes verdes deste recorte não
+representam aceite desses requisitos.
+
 ## Regras de execução
 
 - Cada tarefa tem um único resultado principal e um ou dois arquivos prováveis,
@@ -745,6 +776,21 @@ uma inspeção visual posterior.
 - **Prioridade:** P0
 - **Tamanho:** P
 - **Descrição:** verificar limites e alternância de unidades.
+- **Extensão solicitada:** implementar `formatTemperature(celsius, unit, locale?)`
+  e `unitLabel(unit)` no módulo de temperatura, reutilizando a formatação
+  existente. Cobrir arredondamento ao inteiro, símbolo, locale e
+  ausência de medição na suíte dedicada, sem duplicar os testes de conversão.
+- **Ajuste solicitado:** exibir todas as temperaturas sem casas decimais,
+  reutilizando `formatTemperature` nos componentes atual e diário, preservando
+  a precisão dos dados e a casa decimal de vento/precipitação. Esta regra
+  substitui os exemplos decimais de temperatura dos aceites anteriores.
+- **Evidência do ajuste (2026-10-27):** `pnpm lint`, `pnpm build` e
+  `pnpm test` aprovados (114 testes em 12 arquivos), incluindo arredondamento
+  positivo/negativo e apresentação atual/diária nas duas unidades.
+- **Evidência da extensão (2026-10-27):** suíte dedicada com 28 testes aprovada;
+  `pnpm exec vitest run tests/unit/temperature.test.ts tests/unit/weatherLib.test.ts`
+  aprovado (37 testes); `pnpm lint`, `pnpm build` e `pnpm test` aprovados
+  (112 testes em 12 arquivos na suíte completa).
 - **Requisitos:** CA-05a/05b.
 - **Dependências:** T-11, T-13.
 - **Arquivos prováveis:** `tests/unit/temperature.test.ts`.

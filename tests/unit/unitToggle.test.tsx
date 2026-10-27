@@ -1,12 +1,47 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import CurrentWeather from '../../src/components/CurrentWeather';
 import UnitToggle from '../../src/components/UnitToggle';
+import { mockWeatherData } from '../../src/mocks/weather';
 import type { Unit } from '../../src/types/weather';
 
 afterEach(cleanup);
 
 describe('UnitToggle', () => {
+  it('atualiza o clima de 0 °C para 32 °F ao clicar e permite retornar a Celsius', async () => {
+    const user = userEvent.setup();
+    const current = { ...mockWeatherData.current, temperatureC: 0 };
+    const snapshot = structuredClone(current);
+
+    function WeatherWithUnitToggle() {
+      const [unit, setUnit] = useState<Unit>('celsius');
+      return (
+        <>
+          <UnitToggle unit={unit} onChange={setUnit} />
+          <CurrentWeather city={mockWeatherData.city} current={current} unit={unit} />
+        </>
+      );
+    }
+
+    render(<WeatherWithUnitToggle />);
+    const weather = screen.getByRole('region', { name: mockWeatherData.city.name });
+    expect(weather).toHaveTextContent(/Temperatura:\s*0 °C/);
+
+    await user.click(screen.getByRole('button', { name: '°F' }));
+
+    expect(weather).toHaveTextContent(/Temperatura:\s*32 °F/);
+    expect(weather).not.toHaveTextContent('0 °C');
+    expect(screen.getByRole('button', { name: '°F' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: '°C' }));
+
+    expect(weather).toHaveTextContent(/Temperatura:\s*0 °C/);
+    expect(weather).not.toHaveTextContent('32 °F');
+    expect(current).toEqual(snapshot);
+  });
+
   it.each<Unit>([
     'celsius',
     'fahrenheit',

@@ -169,7 +169,12 @@ export type WeatherResult =
 Regras do contrato:
 
 - Temperaturas permanecem em Celsius no modelo; converter apenas para exibição. Isso evita erro acumulado ao alternar unidades.
-- Arredondar somente na formatação: temperaturas, velocidade do vento e precipitação com uma casa decimal; umidade relativa, pressão e probabilidade para o inteiro mais próximo.
+- `temperature.ts` expõe `convertTemperature(celsius, unit)`,
+  `unitLabel(unit)` (`°C` ou `°F`) e
+  `formatTemperature(celsius, unit, locale?)`. Este último converte e reutiliza
+  `formatMeasurement` sem casas decimais, com espaço e símbolo; `null` produz
+  `Indisponível`. Locale omitido usa a localidade do dispositivo.
+- Arredondar somente na formatação: temperaturas, umidade relativa, pressão e probabilidade para o inteiro mais próximo; velocidade do vento e precipitação com uma casa decimal.
 - Usar `weather_code` da Open-Meteo para mapear descrições pt-BR e ícones. Código desconhecido resulta em `labelPtBr: 'Condição indisponível'` e `iconKey: 'unknown'`.
 - Valores numéricos devem preservar precisão internamente; a formatação usa a localidade do dispositivo.
 - `Unit` e `ForecastDay` substituem os nomes anteriores `TemperatureUnit` e `DailyForecast` no modelo; o componente visual continua chamado `DailyForecast.tsx`.
@@ -488,7 +493,7 @@ function toDisplayTemperature(valueC: number | null, unit: Unit): number | null 
 }
 ```
 
-O `null` retornado representa ausência já validada no serviço; a UI o apresenta explicitamente como “Indisponível”, não como zero. Formatar o resultado com uma casa decimal, locale do dispositivo e símbolo correspondente, somente na apresentação.
+O `null` retornado representa ausência já validada no serviço; a UI o apresenta explicitamente como “Indisponível”, não como zero. Formatar a temperatura sem casas decimais, com locale do dispositivo e símbolo correspondente, somente na apresentação.
 
 Alternar unidade apenas despacha a mudança de `temperatureUnit`. Nenhum efeito de busca depende desse campo: não executar `fetch`, não mudar `fetchedAt` e não alterar vento, pressão ou precipitação. Voltar a Celsius reutiliza o valor canônico original, sem erro acumulado.
 

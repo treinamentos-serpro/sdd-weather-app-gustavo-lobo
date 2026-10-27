@@ -29,7 +29,7 @@ describe('CurrentWeather', () => {
     expect(screen.getByRole('img', { name: 'Céu limpo' })).toHaveTextContent('☀️');
     expect(screen.getByText('Céu limpo')).toBeInTheDocument();
     for (const text of [
-      `${formatted(20.04, 1)} °C`,
+      `${formatted(20.04, 0)} °C`,
       `${formatted(63.4, 0)}%`,
       `${formatted(12.34, 1)} km/h`,
       `${formatted(0.46, 1)} mm`,
@@ -46,11 +46,11 @@ describe('CurrentWeather', () => {
     const { rerender } = render(
       <CurrentWeather city={mockWeatherData.city} current={current} unit="fahrenheit" />,
     );
-    expect(screen.getByText(`${formatted(68.072, 1)} °F`, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(`${formatted(68.072, 0)} °F`, { exact: false })).toBeInTheDocument();
     expect(screen.getByText(`${formatted(12.34, 1)} km/h`)).toBeInTheDocument();
 
     rerender(<CurrentWeather city={mockWeatherData.city} current={current} unit="celsius" />);
-    expect(screen.getByText(`${formatted(20.04, 1)} °C`, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(`${formatted(20.04, 0)} °C`, { exact: false })).toBeInTheDocument();
     expect(current).toEqual(snapshot);
   });
 

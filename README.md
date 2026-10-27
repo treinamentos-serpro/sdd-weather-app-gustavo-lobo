@@ -157,6 +157,15 @@ do callback. `disabled` bloqueia o campo, o botão e o envio do formulário.
 
 ## Controle de unidade
 
+O módulo [temperature](src/lib/temperature.ts) exporta
+`convertTemperature(celsius, unit)`, que preserva precisão e valores `null`;
+`unitLabel(unit)`, que retorna `°C` ou `°F`; e
+`formatTemperature(celsius, unit, locale?)`, que converte e formata a
+temperatura sem casas decimais e com símbolo (por exemplo, `12 °C` em pt-BR).
+Sem locale explícito, usa a localidade do dispositivo. Medições `null`
+aparecem como `Indisponível`, não como zero. Os testes dedicados estão em
+[temperature.test.ts](tests/unit/temperature.test.ts).
+
 [UnitToggle](src/components/UnitToggle.tsx) implementa o controle previsto como
 `TemperatureUnitToggle` no plano. Recebe `unit: Unit` e `onChange(unit: Unit)`,
 sem estado interno, conversão ou acesso à API. Os botões `°C` e `°F` indicam a

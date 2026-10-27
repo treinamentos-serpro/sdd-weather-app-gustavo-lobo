@@ -12,6 +12,13 @@ Esta especificação define o escopo funcional, mas não está pronta para aprov
 
 ## Functional Requirements
 
+**Ajuste de apresentação aprovado:** temperaturas atuais, mínimas e máximas
+em Celsius e Fahrenheit são arredondadas ao inteiro mais próximo, sem casas
+decimais (20.04 → `20 °C`; 12.26 → `12 °C`; 19.96 → `20 °C`).
+Esta regra substitui a precisão decimal de temperatura nos requisitos e
+exemplos abaixo; vento e precipitação continuam com uma casa decimal.
+Os dados e as conversões mantêm a precisão original.
+
 ### Recorte aprovado para o serviço de integração
 
 As operações `searchCities(name): Promise<City[]>` e

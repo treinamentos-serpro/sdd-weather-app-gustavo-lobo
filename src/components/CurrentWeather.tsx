@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { convertTemperature } from '../lib/temperature';
+import { formatTemperature } from '../lib/temperature';
 import { weatherIcons } from '../lib/weatherCodes';
 import { formatMeasurement } from '../lib/weatherFormat';
 import type { City, CurrentWeather as CurrentWeatherData, Unit } from '../types/weather';
@@ -50,11 +50,7 @@ export default function CurrentWeather({ city, current, unit }: CurrentWeatherPr
           }
         >
           <span className="sr-only">Temperatura: </span>
-          {formatMeasurement(
-            convertTemperature(current.temperatureC, unit),
-            1,
-            unit === 'celsius' ? '°C' : '°F',
-          )}
+          {formatTemperature(current.temperatureC, unit)}
         </p>
       </div>
       <p className="mt-3 text-lg">{conditionLabel}</p>

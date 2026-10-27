@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { formatDayLabel } from '../lib/format';
-import { convertTemperature } from '../lib/temperature';
+import { formatTemperature } from '../lib/temperature';
 import { weatherIcons } from '../lib/weatherCodes';
 import { formatMeasurement } from '../lib/weatherFormat';
 import type { ForecastDay, Unit } from '../types/weather';
@@ -13,27 +13,20 @@ export interface ForecastCardProps {
 export default function ForecastCard({ day, unit }: ForecastCardProps) {
   const headingId = useId();
   const conditionLabel = day.condition?.labelPtBr ?? 'Condição indisponível';
-  const temperatureSymbol = unit === 'celsius' ? '°C' : '°F';
   const metrics = [
     {
       label: 'Máxima',
-      value: convertTemperature(day.maxTemperatureC, unit),
-      digits: 1,
-      unit: temperatureSymbol,
+      value: formatTemperature(day.maxTemperatureC, unit),
     },
     {
       label: 'Mínima',
-      value: convertTemperature(day.minTemperatureC, unit),
-      digits: 1,
-      unit: temperatureSymbol,
+      value: formatTemperature(day.minTemperatureC, unit),
     },
     {
       label: 'Probabilidade de chuva',
-      value: day.precipitationProbabilityMaxPct,
-      digits: 0,
-      unit: '%',
+      value: formatMeasurement(day.precipitationProbabilityMaxPct, 0, '%'),
     },
-    { label: 'Precipitação diária', value: day.precipitationSumMm, digits: 1, unit: 'mm' },
+    { label: 'Precipitação diária', value: formatMeasurement(day.precipitationSumMm, 1, 'mm') },
   ];
 
   return (
@@ -53,7 +46,7 @@ export default function ForecastCard({ day, unit }: ForecastCardProps) {
           <div key={metric.label}>
             <dt className="text-sm text-slate-300">{metric.label}</dt>
             <dd className="font-semibold">
-              {formatMeasurement(metric.value, metric.digits, metric.unit)}
+              {metric.value}
             </dd>
           </div>
         ))}

@@ -109,6 +109,93 @@ describe('searchCities', () => {
 });
 
 describe('getWeather', () => {
+  it.each([
+    null,
+    '28.4',
+    undefined,
+  ])('isola temperatura atual inválida %j sem perder campos válidos', async (value) => {
+    const data = forecastResponse();
+    respond({ ...data, current: { ...data.current, temperature_2m: value } });
+    const result = await getWeather(city);
+    expect(result.current.temperatureC).toBeNull();
+    expect(result.current.relativeHumidityPct).toBe(74);
+    expect(result.current.windSpeedKmh).toBe(18.2);
+    expect(result.forecast).toHaveLength(5);
+    expect(result.issues).toEqual([{ path: 'current.temperature_2m', kind: 'invalid-field' }]);
+  });
+
+  it('preserva os demais arrays quando temperaturas diárias têm tipos inválidos ou faltam', async () => {
+    const data = forecastResponse();
+    respond({
+      ...data,
+      daily: { ...data.daily, temperature_2m_min: [null, '24', 0], temperature_2m_max: undefined },
+    });
+    const result = await getWeather(city);
+    expect(result.forecast.map((day) => day.minTemperatureC)).toEqual([null, null, 0, null, null]);
+    expect(result.forecast.map((day) => day.maxTemperatureC)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(result.forecast.map((day) => day.precipitationSumMm)).toEqual([0.8, 4.2, 0.2, 0, 3.1]);
+    expect(result.forecast[0].condition?.code).toBe(3);
+    expect(result.issues).toHaveLength(9);
+  });
+
+  it.each([
+    undefined,
+    { time: [1793116800], precipitation: [9] },
+  ])('não usa precipitação futura nem inventa valores quando hourly é %j', async (hourly) => {
+    respond({ ...forecastResponse(), hourly });
+    const result = await getWeather(city);
+    expect(result.current.precipitationPreviousHourMm).toBeNull();
+    expect(result.current.precipitationPeriod).toBeNull();
+    expect(result.current.temperatureC).toBe(28.4);
+    expect(result.forecast).toHaveLength(5);
+    expect(result.issues).toContainEqual({ path: 'hourly', kind: 'invalid-block' });
+  });
+
+  it.each([
+    {
+      timezone: 'Pacific/Kiritimati',
+      times: [
+        '2026-12-30T10:00:00Z',
+        '2026-12-31T10:00:00Z',
+        '2027-01-01T10:00:00Z',
+        '2027-01-02T10:00:00Z',
+        '2027-01-03T10:00:00Z',
+      ],
+      dates: ['2026-12-31', '2027-01-01', '2027-01-02', '2027-01-03', '2027-01-04'],
+    },
+    {
+      timezone: 'America/New_York',
+      times: [
+        '2026-10-31T04:00:00Z',
+        '2026-11-01T04:00:00Z',
+        '2026-11-02T05:00:00Z',
+        '2026-11-03T05:00:00Z',
+        '2026-11-04T05:00:00Z',
+      ],
+      dates: ['2026-10-31', '2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04'],
+    },
+  ])('preserva cinco datas locais em $timezone, inclusive transições de calendário/offset', async ({
+    timezone,
+    times,
+    dates,
+  }) => {
+    const data = forecastResponse();
+    respond({
+      ...data,
+      timezone,
+      daily: { ...data.daily, time: times.map((time) => Date.parse(time) / 1000) },
+    });
+    const result = await getWeather(city);
+    expect(result.forecast.map((day) => day.date)).toEqual(dates);
+    expect(result.city).toBe(city);
+  });
+
   it('solicita unidades canônicas e mapeia current e exatamente cinco índices diários', async () => {
     respond(forecastResponse());
     const result = await getWeather(city);
@@ -173,21 +260,49 @@ describe('getWeather', () => {
     }
   });
 
-  it('preserva null e zero em arrays parciais, com issues explícitos', async () => {
+  it.each([
+    ['precipitation_probability_max', 'precipitationProbabilityMaxPct'],
+    ['precipitation_sum', 'precipitationSumMm'],
+  ] as const)('distingue null de zero no campo diário %s', async (field, property) => {
     const data = forecastResponse();
     respond({
       ...data,
-      daily: { ...data.daily, precipitation_probability_max: [null, 0] },
+      daily: { ...data.daily, [field]: [null, 0] },
     });
     const result = await getWeather(city);
-    expect(result.forecast.map((day) => day.precipitationProbabilityMaxPct)).toEqual([
-      null,
-      0,
-      null,
-      null,
-      null,
-    ]);
-    expect(result.issues).toHaveLength(4);
+    expect(result.forecast.map((day) => day[property])).toEqual([null, 0, null, null, null]);
+    expect(result.issues).toEqual(
+      [0, 2, 3, 4].map((index) => ({
+        path: `daily.${field}[${index}]`,
+        kind: 'invalid-field',
+      })),
+    );
+  });
+
+  it.each([
+    null,
+    0,
+  ])('preserva precipitação horária %j sem confundir ausência com zero', async (value) => {
+    const data = forecastResponse();
+    respond({
+      ...data,
+      hourly: { ...data.hourly, precipitation: [0.2, value, 9] },
+    });
+    const result = await getWeather(city);
+    expect(result.current.precipitationPreviousHourMm).toBe(value);
+    if (value === null) {
+      expect(result.current.precipitationPeriod).toBeNull();
+      expect(result.issues).toEqual([
+        { path: 'hourly.precipitation[1]', kind: 'invalid-field' },
+        { path: 'hourly', kind: 'invalid-block' },
+      ]);
+    } else {
+      expect(result.current.precipitationPeriod).toEqual({
+        start: '2026-10-27T14:00:00.000Z',
+        end: '2026-10-27T15:00:00.000Z',
+      });
+      expect(result.issues).toEqual([]);
+    }
   });
 
   it('não inventa medições quando o instante atual é inválido', async () => {
@@ -214,10 +329,13 @@ describe.each([
   ['busca', () => searchCities('Recife')],
   ['forecast', () => getWeather(city)],
 ] as const)('erros de %s', (_name, operation) => {
-  it('lança erro tipado para HTTP não-ok', async () => {
-    fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
+  it.each([
+    400, 429, 500, 503,
+  ])('lança erro tipado para HTTP %s, sem retry automático', async (status) => {
+    fetchMock.mockResolvedValue(new Response(null, { status }));
     await expect(operation()).rejects.toBeInstanceOf(WeatherServiceError);
-    await expect(operation()).rejects.toThrow('HTTP 503');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('preserva a causa da falha de rede', async () => {

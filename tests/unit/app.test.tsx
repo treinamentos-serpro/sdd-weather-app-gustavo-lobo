@@ -23,6 +23,52 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('App integrado', () => {
+  it.each([
+    [0, '32'],
+    [100, '212'],
+    [-40, '-40'],
+  ] as const)('converte as onze temperaturas de %s °C para %s °F sem refazer consultas', async (celsius, fahrenheit) => {
+    const data = {
+      ...mockWeatherData,
+      current: { ...mockWeatherData.current, temperatureC: celsius },
+      forecast: mockWeatherData.forecast.map((day) => ({
+        ...day,
+        minTemperatureC: celsius,
+        maxTemperatureC: celsius,
+      })),
+    };
+    const snapshot = structuredClone(data);
+    weatherMock.mockResolvedValue(data);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(screen.getByRole('searchbox', { name: 'Nome da cidade' }), 'São Paulo{Enter}');
+    await screen.findByRole('region', { name: 'São Paulo' });
+    const main = within(screen.getByRole('main'));
+    for (let index = 0; index < 3; index += 1) {
+      await user.click(screen.getByRole('button', { name: '°F' }));
+      expect(main.getAllByText(`${fahrenheit} °F`, { exact: false })).toHaveLength(11);
+      expect(main.queryByText(/°C/)).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: '°C' }));
+      expect(main.getAllByText(`${celsius} °C`, { exact: false })).toHaveLength(11);
+    }
+    expect(searchMock).toHaveBeenCalledTimes(1);
+    expect(weatherMock).toHaveBeenCalledTimes(1);
+    expect(data).toEqual(snapshot);
+  });
+
+  it('remove dados anteriores se uma nova consulta falhar, sem fallback para sucesso', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(screen.getByRole('searchbox'), 'São Paulo{Enter}');
+    await screen.findByRole('region', { name: 'São Paulo' });
+    weatherMock.mockRejectedValueOnce(new WeatherServiceError('Falha de rede.'));
+    await user.click(screen.getByRole('button', { name: 'Buscar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Falha de rede.');
+    expect(screen.queryByRole('region', { name: 'São Paulo' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeEnabled();
+  });
+
   it('inicia idle com Celsius e orientação sem consultar a rede', () => {
     render(<App />);
     expect(screen.getByRole('main')).toHaveTextContent('Como está o clima por aí?');

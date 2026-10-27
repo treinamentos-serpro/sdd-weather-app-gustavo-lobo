@@ -35,8 +35,8 @@ describe('ForecastCard', () => {
     expect(screen.getByText('Nublado')).toBeInTheDocument();
     expect(screen.getByText('Máxima')).toBeInTheDocument();
     expect(screen.getByText('Mínima')).toBeInTheDocument();
-    expect(screen.getByText(`${formatted(19.96, 1)} °C`)).toBeInTheDocument();
-    expect(screen.getByText(`${formatted(12.26, 1)} °C`)).toBeInTheDocument();
+    expect(screen.getByText(`${formatted(19.96, 0)} °C`)).toBeInTheDocument();
+    expect(screen.getByText(`${formatted(12.26, 0)} °C`)).toBeInTheDocument();
     expect(screen.getByText(`${formatted(2.26, 1)} mm`)).toBeInTheDocument();
     expect(screen.getByText('67%')).toBeInTheDocument();
   });
@@ -46,13 +46,13 @@ describe('ForecastCard', () => {
     const { rerender } = render(<ForecastCard day={day} unit="celsius" />);
     rerender(<ForecastCard day={day} unit="fahrenheit" />);
 
-    expect(screen.getByText(`${formatted(67.928, 1)} °F`)).toBeInTheDocument();
-    expect(screen.getByText(`${formatted(54.068, 1)} °F`)).toBeInTheDocument();
+    expect(screen.getByText(`${formatted(67.928, 0)} °F`)).toBeInTheDocument();
+    expect(screen.getByText(`${formatted(54.068, 0)} °F`)).toBeInTheDocument();
     expect(screen.getByText('67%')).toBeInTheDocument();
     expect(screen.getByText(`${formatted(2.26, 1)} mm`)).toBeInTheDocument();
 
     rerender(<ForecastCard day={day} unit="celsius" />);
-    expect(screen.getByText(`${formatted(19.96, 1)} °C`)).toBeInTheDocument();
+    expect(screen.getByText(`${formatted(19.96, 0)} °C`)).toBeInTheDocument();
     expect(day).toEqual(snapshot);
   });
 

@@ -10,6 +10,29 @@ describe('formatDayLabel', () => {
   });
 
   it.each([
+    ['2026-10-25', 'dom., 25/10'],
+    ['2026-10-26', 'seg., 26/10'],
+    ['2026-10-27', 'ter., 27/10'],
+    ['2026-10-28', 'qua., 28/10'],
+    ['2026-10-29', 'qui., 29/10'],
+    ['2026-10-30', 'sex., 30/10'],
+    ['2026-10-31', 'sáb., 31/10'],
+    ['2028-02-29', 'ter., 29/02'],
+  ])('formata dia da semana e data curta para %s', (date, expected) => {
+    expect(formatDayLabel(date, 'pt-BR')).toBe(expected);
+  });
+
+  it('usa a localidade do dispositivo quando omitida', () => {
+    const expected = new Intl.DateTimeFormat(undefined, {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      timeZone: 'UTC',
+    }).format(new Date('2026-10-27T00:00:00Z'));
+    expect(formatDayLabel('2026-10-27')).toBe(expected);
+  });
+
+  it.each([
     'America/Los_Angeles',
     'Pacific/Kiritimati',
     'UTC',
