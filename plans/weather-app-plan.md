@@ -56,9 +56,8 @@ Estrutura proposta, alinhada às convenções do repositório:
 ```text
 src/
   main.tsx
-  app/
-    App.tsx
   components/
+    App.tsx
     CitySearch.tsx
     CityResults.tsx
     CurrentWeather.tsx
@@ -79,7 +78,7 @@ src/
 ```
 
 - `main.tsx`: inicializa React e importa o estilo global.
-- `App.tsx`: conecta o hook aos componentes e compõe a experiência, sem concentrar regras de negócio.
+- `components/App.tsx`: conecta o hook aos componentes e compõe a experiência, sem concentrar regras de negócio; segue a convenção de manter componentes React em `components/`.
 - `components/`: apresentação e interação acessível, sem chamadas HTTP. `CitySearch` captura a busca; `CityResults` oferece seleção explícita; `CurrentWeather` e `DailyForecast` apresentam indicadores; `TemperatureUnitToggle` altera a unidade; `RequestStatus` apresenta carregamento, vazio e erro com ação de nova tentativa.
 - `useWeather.ts`: estado e ações da busca/consulta, seleção, unidade, nova tentativa e proteção contra respostas antigas.
 - `openMeteo.ts`: endpoints, parsing, validação e mapeamento para tipos internos.
@@ -126,7 +125,7 @@ export interface WeatherCondition {
 }
 
 export interface CurrentWeather {
-  referenceTime: string | null; // current.time: data/hora local ISO no fuso de WeatherData.
+  referenceTime: string | null; // Instante de current.time normalizado para ISO-8601 UTC, com Z.
   temperatureC: number | null; // temperature_2m, em °C.
   condition: WeatherCondition | null; // Condição de weather_code.
   relativeHumidityPct: number | null; // relative_humidity_2m, em %.
@@ -134,13 +133,13 @@ export interface CurrentWeather {
   surfacePressureHpa: number | null; // surface_pressure, em hPa.
   precipitationPreviousHourMm: number | null; // Acumulado da última hora fechada, em mm.
   precipitationPeriod: { // Janela horária efetivamente retornada; não derivada de fetchedAt.
-    start: string; // Início local ISO no fuso de WeatherData.
-    end: string; // Fim local ISO no fuso de WeatherData.
+    start: string; // Início do intervalo em ISO-8601 UTC, com Z.
+    end: string; // Fim do intervalo em ISO-8601 UTC, com Z.
   } | null;
 }
 
 export interface ForecastDay {
-  date: string; // daily.time: YYYY-MM-DD no fuso local da cidade.
+  date: string; // Data civil YYYY-MM-DD derivada de daily.time no fuso da cidade.
   minTemperatureC: number | null; // temperature_2m_min, em °C.
   maxTemperatureC: number | null; // temperature_2m_max, em °C.
   condition: WeatherCondition | null; // Condição diária de weather_code.
@@ -174,7 +173,7 @@ Regras do contrato:
 - Usar `weather_code` da Open-Meteo para mapear descrições pt-BR e ícones. Código desconhecido resulta em `labelPtBr: 'Condição indisponível'` e `iconKey: 'unknown'`.
 - Valores numéricos devem preservar precisão internamente; a formatação usa a localidade do dispositivo.
 - `Unit` e `ForecastDay` substituem os nomes anteriores `TemperatureUnit` e `DailyForecast` no modelo; o componente visual continua chamado `DailyForecast.tsx`.
-- Em sucesso parcial com bloco diário indisponível, `forecast=[]` exige mensagem explícita na UI; não representa uma previsão completa. Sem bloco atual, os seus campos ficam `null`, preservando eventual precipitação horária com período próprio.
+- Em sucesso parcial com bloco diário indisponível, `forecast=[]` exige mensagem explícita na UI; não representa uma previsão completa. A dependência da precipitação em relação ao horário atual segue a regra única em External APIs; sem bloco atual, todos os campos de `current` ficam `null`.
 - `labelPtBr`, `iconKey` e `fetchedAt` são produzidos pela aplicação. O tipo `ForecastDay[]` não garante quantidade nem sequência: essas condições exigem validação no serviço.
 - A política normativa para ausências, campos malformados e falhas estruturais está em Error Handling. Campos rejeitados ficam indisponíveis com aviso explícito em `issues`, nunca são corrigidos por coerção ou substituídos por zero.
 - `fetchedAt` significa “Consultado em”, não o instante meteorológico. Exibir também “Dados referentes a” com `current.referenceTime` e a janela de precipitação, formatados no fuso da cidade. Sem horário válido, não atribuir medições ao instante da consulta.
@@ -303,7 +302,7 @@ Lista ausente ou vazia em uma resposta válida representa nenhum resultado; erro
 | `temperature_unit` | `celsius` | Unidade canônica do modelo. |
 | `wind_speed_unit` | `kmh` | Vento em km/h. |
 | `precipitation_unit` | `mm` | Precipitação em milímetros. |
-| `timeformat` | `iso8601` | Datas e horários em formato ISO. |
+| `timeformat` | `unixtime` | Instantes em segundos Unix, sem ambiguidade nas horas repetidas. |
 
 Exemplo de URL; quebras de linha apenas para leitura:
 
@@ -319,7 +318,7 @@ https://api.open-meteo.com/v1/forecast
 &temperature_unit=celsius
 &wind_speed_unit=kmh
 &precipitation_unit=mm
-&timeformat=iso8601
+&timeformat=unixtime
 ```
 
 Resposta resumida e ilustrativa; `hourly` mostra apenas dois horários, e os metadados de unidades foram omitidos:
@@ -331,7 +330,7 @@ Resposta resumida e ilustrativa; `hourly` mostra apenas dois horários, e os met
   "timezone": "America/Recife",
   "utc_offset_seconds": -10800,
   "current": {
-    "time": "2026-10-27T12:15",
+    "time": 1793114100,
     "interval": 900,
     "temperature_2m": 28.4,
     "relative_humidity_2m": 74,
@@ -340,11 +339,11 @@ Resposta resumida e ilustrativa; `hourly` mostra apenas dois horários, e os met
     "surface_pressure": 1011.6
   },
   "hourly": {
-    "time": ["2026-10-27T11:00", "2026-10-27T12:00"],
+    "time": [1793109600, 1793113200],
     "precipitation": [0.2, 0.4]
   },
   "daily": {
-    "time": ["2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31"],
+    "time": [1793070000, 1793156400, 1793242800, 1793329200, 1793415600],
     "weather_code": [3, 61, 3, 2, 61],
     "temperature_2m_min": [24.1, 24.0, 24.3, 24.5, 24.2],
     "temperature_2m_max": [29.2, 28.7, 29.4, 30.0, 28.9],
@@ -358,26 +357,29 @@ Mapeamento para `CurrentWeather`:
 
 | Resposta | Modelo |
 |---|---|
-| `current.time` | `referenceTime`, validado como data/hora local no fuso retornado. |
+| `current.time` | `referenceTime`: segundos Unix validados e convertidos para ISO-8601 UTC com `new Date(time * 1000).toISOString()`. |
 | `current.temperature_2m` | `temperatureC` |
 | `current.relative_humidity_2m` | `relativeHumidityPct` |
 | `current.wind_speed_10m` | `windSpeedKmh` |
 | `current.surface_pressure` | `surfacePressureHpa` |
 | `current.weather_code` | `condition`, após mapeamento WMO. |
 | `hourly.precipitation[i]` | `precipitationPreviousHourMm`, conforme a regra abaixo. |
-| Intervalo de uma hora terminado em `hourly.time[i]` | `precipitationPeriod`, com início e fim locais identificados. |
+| Intervalo de uma hora terminado em `hourly.time[i]` | `precipitationPeriod`: fim no instante retornado e início 3.600 segundos antes; ambos normalizados para ISO-8601 UTC. |
 
-**Correção do contrato de precipitação:** não presumir que `current.precipitation` representa uma hora: condições atuais podem ter intervalo de 15 minutos, como `current.interval=900`. Usar o maior `hourly.time[i]` que não ultrapasse `current.time`, comparando no mesmo fuso. No exemplo, o registro de `12:00` contém `0.4 mm` acumulados entre 11:00 e 12:00. Trata-se da **última hora fechada**, não dos 60 minutos encerrados às 12:15. Não extrapolar um acumulado de 15 minutos multiplicando-o por quatro.
+**Correção do contrato de precipitação:** não presumir que `current.precipitation` representa uma hora: condições atuais podem ter intervalo de 15 minutos, como `current.interval=900`. Usar o maior `hourly.time[i]` que não ultrapasse `current.time`, comparando os segundos Unix, sem conversão para horário local. No exemplo, o registro de `12:00` em Recife (`1793113200`, ou `2026-10-27T15:00:00Z`) contém `0.4 mm` acumulados entre 11:00 e 12:00 locais. Trata-se da **última hora fechada**, não dos 60 minutos encerrados às 12:15. Não extrapolar um acumulado de 15 minutos multiplicando-o por quatro.
 
 Validar a disponibilidade desse registro, inclusive na virada do dia; se não houver medição correspondente, retornar `null` e apresentar indisponibilidade, sem usar um horário futuro. A interpretação de “hora anterior” como última hora fechada deve ser confirmada com o produto antes de fechar o aceite de FR-03.
 
-Se `current.time` estiver ausente ou inválido, não usar `fetchedAt` para substituí-lo nem selecionar silenciosamente outro período de precipitação. Marcar o bloco atual e a precipitação dependente desse horário como indisponíveis, preservando previsão diária válida. Comparações e cálculo do início do intervalo devem respeitar o fuso e transições de horário de verão, sem parsing implícito no fuso do dispositivo.
+
+**Regra única de dependência:** a seleção da precipitação exige `current.time` válido. Se esse horário estiver ausente ou inválido, manter `referenceTime`, as medições atuais, `precipitationPreviousHourMm` e `precipitationPeriod` como `null`; preservar previsão diária válida. Registrar `invalid-block` quando houver horário/bloco malformado, conforme Error Handling. Não substituir o horário por `fetchedAt` nem escolher uma janela independente.
+
+**Contrato temporal:** validar timestamps como números inteiros de segundos Unix, representáveis por `Date`. Instantes atuais/horários ficam em ISO-8601 UTC no domínio; formatação usa `WeatherData.timezone`. O offset da resposta não deve ser somado aos instantes nem aplicado como deslocamento fixo a todo o horizonte.
 
 Mapeamento para `ForecastDay`: os arrays de `daily` são paralelos; o mesmo índice representa o mesmo dia.
 
 | Resposta | Modelo |
 |---|---|
-| `daily.time[i]` | `date` |
+| `daily.time[i]` | `date`: extrair ano, mês e dia do instante Unix com `Intl.DateTimeFormat(..., { timeZone: timezone, calendar: 'gregory', numberingSystem: 'latn' }).formatToParts`, montando `YYYY-MM-DD`. |
 | `daily.temperature_2m_min[i]` | `minTemperatureC` |
 | `daily.temperature_2m_max[i]` | `maxTemperatureC` |
 | `daily.weather_code[i]` | `condition`, após mapeamento WMO. |
@@ -399,6 +401,7 @@ Composição de `WeatherData`:
 - Validar unidades retornadas, alinhamento dos arrays e datas no fuso da cidade. Isolar campos ou blocos inválidos conforme Error Handling, sem descartar dados independentes utilizáveis e sem associar valores a datas incertas.
 - O serviço classifica o resultado em `success` ou `empty` e devolve `WeatherResult`, ambos com `data`. O hook aplica o status recebido sem interpretar o JSON externo. Falhas impeditivas rejeitam a operação com `WeatherRequestError`.
 - Preservar `YYYY-MM-DD` como data local, sem interpretá-la automaticamente como meia-noite UTC.
+- No exemplo, `daily.time[0]=1793070000` representa meia-noite de 27/10 em Recife e produz `date='2026-10-27'`. Validar dias consecutivos por calendário civil, não por diferença fixa de 86.400 segundos: dias com mudança de horário de verão podem durar 23 ou 25 horas. As duas ocorrências de uma hora repetida continuam distintas nos timestamps.
 - Mapear códigos WMO para descrição pt-BR e chave de ícone; por exemplo, `3` → `Nublado` / `cloudy`.
 - Não enviar API key nem dados pessoais. URLs e respostas não devem ser registradas com dados desnecessários.
 
@@ -477,7 +480,12 @@ Contrato de erro para a UI:
 export type WeatherRequestError =
   | { kind: 'network'; operation: 'geocoding' | 'weather' }
   | { kind: 'timeout'; operation: 'geocoding' | 'weather' }
-  | { kind: 'http'; operation: 'geocoding' | 'weather'; status: number }
+  | {
+      kind: 'http';
+      operation: 'geocoding' | 'weather';
+      status: number;
+      retryAt: string | null; // Prazo ISO-8601 UTC; null se ausente, inválido ou inacessível.
+    }
   | { kind: 'invalid-response'; operation: 'geocoding' | 'weather' };
 ```
 
@@ -498,6 +506,10 @@ O serviço classifica falhas esperadas; o hook as associa à operação e atuali
 O serviço controla o timeout, cobrindo obtenção e leitura da resposta. Cria o controlador interno da chamada e propaga para ele o cancelamento recebido pelo `signal` do hook, distinguindo a causa do aborto. Libera timer e listeners em todos os caminhos de término; uma resposta tardia não pode sobrescrever o erro de timeout. O hook apenas consome a falha tipada ou ignora cancelamento intencional. O limite numérico continua como decisão pendente de produto/operação e deve ser definido antes da implementação desse mecanismo, sem adotar um valor arbitrário neste plano.
 
 Preservar termo/cidade em erros reais e permitir somente nova tentativa manual no MVP, sem loops de retry. Para 429, respeitar `Retry-After` quando disponível e válido, sinalizando o período de espera antes de reenviar. Mensagens devem identificar a operação que falhou, ser anunciadas de forma acessível e não expor payloads, URLs completas ou detalhes internos.
+
+O serviço normaliza `Retry-After` em `retryAt`: inteiro não negativo representa segundos após o recebimento da resposta; uma data HTTP válida representa o instante absoluto. Aceitar somente prazos representáveis e finitos; prazo já expirado não impõe espera. Header ausente, inválido ou não exposto por CORS resulta em `null`, mantendo o erro HTTP e a mensagem de indisponibilidade, sem inventar prazo ou tentar contornar CORS.
+
+O hook usa o prazo para bloquear os envios da operação afetada até sua expiração (nova tentativa e novo envio da mesma operação), sem bloquear a outra operação nem a conversão de unidade. A UI informa quando será possível tentar novamente; um timer de liberação no hook, limpo ao substituir o erro ou desmontar, atualiza os controles. Antes de enviar, conferir o prazo novamente. Esse timer não é um segundo timeout HTTP e nunca dispara retry automático.
 
 ### Resposta parcial e limites de validade
 
@@ -534,20 +546,20 @@ Priorizar regras e contratos em Vitest, interação isolada em Testing Library e
 | Conversão de temperatura | `0 °C → 32 °F`, `100 °C → 212 °F`, `-40 °C → -40 °F`, negativos, decimais, Celsius inalterado e `null` preservado. Alternâncias repetidas partem sempre do valor canônico. |
 | Formatação | Precisão de cada indicador, símbolos e unidades, zero real versus ausência, locales `pt-BR`/`en-US`; não arredondar os valores armazenados. |
 | Códigos WMO | Códigos representativos das categorias e código desconhecido com rótulo/ícone de fallback. |
-| Datas | Hoje e quatro dias seguintes no fuso da cidade, virada de mês/ano e horário de verão; não deslocar uma data local por parsing UTC. |
+| Datas | Hoje e quatro dias seguintes no fuso da cidade, virada de mês/ano e horário de verão; timestamps distintos nas duas ocorrências da hora repetida; dias de 23/25 horas; não deslocar uma data civil por parsing UTC. |
 | Precipitação horária | Última hora fechada, ausência de registro, virada do dia e rejeição de horário futuro; `current.interval=900` não equivale a uma hora. |
 
 ### Vitest: serviços com mock de `fetch`
 
 Simular a fronteira HTTP, exercitando construção de URL, parsing, validação e mapeamento reais. Usar respostas e promessas controladas; não chamar a Open-Meteo ao vivo.
 
-- **Requisição:** conferir método, termo preservado com acentos/espaços/hífens/apóstrofos, coordenadas, `current`, `hourly`, `daily`, unidades, `timezone=auto`, `forecast_days=5`, `timeformat` e propagação do `AbortSignal`. Comparar parâmetros via `URL`, sem depender da ordem da query string.
+- **Requisição:** conferir método, termo preservado com acentos/espaços/hífens/apóstrofos, coordenadas, `current`, `hourly`, `daily`, unidades, `timezone=auto`, `forecast_days=5`, `timeformat=unixtime` e propagação do `AbortSignal`. Comparar parâmetros via `URL`, sem depender da ordem da query string.
 - **Geocoding:** resultados múltiplos, lista vazia/ausente válida, campos opcionais ausentes e campos obrigatórios inválidos; manter identidade e coordenadas da cidade.
 - **Forecast completo:** verificar `WeatherResult.status`, valores normalizados em `data`, cinco datas ordenadas, alinhamento dos arrays, fuso, unidades, horário de referência, intervalo de precipitação e `fetchedAt` com relógio controlado.
 - **Resposta parcial:** indicadores `null` ou ausentes, campo inválido isolado, série desalinhada, datas/bloco atual inválidos e blocos ausentes. Conferir preservação dos dados independentes válidos e avisos em `issues`. Nunca preencher ausência com zero ou declarar uma série malformada válida.
 - **Vazio meteorológico:** resposta sem indicadores e sem erros de validação, mas com contexto temporal válido; verificar que serviço e hook preservam `data` em `empty` e a UI identifica o local/período.
 - **Resposta inválida impeditiva:** JSON/envelope raiz inválido, fuso inválido, envelope de erro em HTTP 2xx e problemas de validação que deixem a resposta sem dados utilizáveis. Distinguir esses casos da invalidação localizada que permite sucesso parcial.
-- **Falhas:** rejeição de rede, HTTP 400/429/5xx, `Retry-After` válido/inválido e cancelamento. Verificar a classificação do erro, sem retorno com aparência de sucesso.
+- **Falhas:** rejeição de rede, HTTP 400/429/5xx, `Retry-After` em segundos/data HTTP, zero, expirado, inválido, ausente e inacessível por CORS; conferir `retryAt` com relógio controlado. Verificar classificação do erro, cancelamento e ausência de retorno com aparência de sucesso.
 - **Timeout:** testar o serviço com timers simulados e mock de `fetch` que respeite o sinal, inclusive durante leitura do corpo; conferir aborto, classificação e liberação de timers/listeners. No hook, verificar fim do loading ao receber o erro tipado. O prazo numérico ainda depende da decisão registrada no plano.
 
 ### Vitest + Testing Library: reducer, hook e componentes
@@ -557,6 +569,8 @@ Testar o reducer por transições e invariantes; testar o hook com serviços sim
 - Status e erros independentes de geocoding/clima; preservação de termo/cidade; nova tentativa usando o termo efetivamente enviado, mesmo após edição.
 - Seleção explícita, limpeza dos dados ao trocar cidade, cancelamento por substituição/desmontagem e descarte de sucesso, erro e finalização antigos.
 - Alternar `Unit` atualiza todas as temperaturas sem chamada ao serviço, sem modificar `fetchedAt` ou os valores canônicos.
+- Com 429 e `retryAt` futuro, bloquear somente envios da operação afetada, liberar no prazo sem request automático e limpar o timer na substituição/desmontagem; a outra operação e o toggle continuam utilizáveis.
+- Sem `current.time` válido, não apresentar precipitação horária independente, mesmo com `hourly` preenchido; manter a previsão diária válida e o aviso correspondente.
 
 Renderizar os componentes com props controladas e verificar:
 
