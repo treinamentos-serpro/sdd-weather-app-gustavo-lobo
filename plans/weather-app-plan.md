@@ -234,6 +234,26 @@ Uma busca sem cidades não inicia forecast. Resposta parcial utilizável permane
 
 ## External APIs
 
+**Ajuste do recorte de implementação:** usar `src/services/weatherService.ts`,
+com `searchCities(name): Promise<City[]>` e
+`getWeather(city): Promise<WeatherData>`, conforme solicitado. A busca usa
+`encodeURIComponent`; erros HTTP, de rede, de JSON e respostas incompletas
+lançam `WeatherServiceError`. `current` e `daily` são obrigatórios neste
+recorte; os cinco dias e campos anuláveis mantêm os contratos de domínio
+abaixo.
+
+**Extensão de integração solicitada:** `fetchWithTimeout` usa `AbortController`
+com 10 segundos, limpa o timer em `finally` e normaliza `AbortError` para
+`A requisição demorou demais.` e falhas de rede para `Falha de rede.`.
+`useWeather` expõe status único, `data`, `cities`, `error`, `query`,
+`search`, `selectCity` e `retry`. A busca carrega a primeira cidade
+automaticamente; seleção manual pode trocar a cidade. Retry repete a busca
+se ela falhou, ou apenas forecast se a cidade já foi encontrada.
+Identificadores de operação descartam resultados antigos e após desmontagem.
+`App` mantém somente a unidade como estado de UI e não usa mock nem controles
+de demonstração. Cancelamento externo e espera de `Retry-After` seguem fora
+deste recorte.
+
 O serviço expõe operações específicas, sem cliente HTTP genérico:
 
 ```ts

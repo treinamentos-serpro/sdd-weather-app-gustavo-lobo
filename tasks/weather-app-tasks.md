@@ -416,6 +416,40 @@ Preparação e decisões → tipos → funções puras → services → hook →
 
 ## Entrega 3 — Services
 
+### Recorte solicitado — timeout, hook e integração da tela
+
+- Adicionar `fetchWithTimeout` ao serviço com `AbortController`, 10 segundos,
+  mensagens tipadas exatas e `clearTimeout` em `finally`.
+- Implementar `src/hooks/useWeather.ts` com status único, busca e carregamento
+  automático da primeira cidade, seleção manual, retry da operação que falhou
+  e descarte de respostas antigas/desmontadas.
+- Substituir mock e controles demo de `App` pelo hook; manter unidade local,
+  estados acessíveis, opções de cidade e ação de retry.
+- Atualizar testes de serviço, hook, App e E2E para os fluxos reais com rede
+  simulada; executar lint, build, unitários e E2E desktop/mobile.
+- **Evidência (2026-10-27):** `pnpm lint` e `pnpm build` aprovados;
+  `pnpm test` aprovado (89 testes em 11 arquivos); `pnpm test:e2e` aprovado
+  (6 testes, projetos chromium e mobile). Timeout verificado em 9.999/10.000 ms
+  com timer limpo; retry, seleção e descarte de respostas antigas cobertos.
+
+### Recorte solicitado — busca e forecast
+
+- Implementar as operações públicas em `src/services/weatherService.ts`,
+  correspondentes ao geocoding e aos mapeamentos de clima atual/diário.
+- Retornar `[]` sem rede para nome vazio; codificar nomes com
+  `encodeURIComponent` e normalizar resultados para `City[]`.
+- Mapear clima atual e cinco índices diários para `WeatherData`, reutilizando
+  códigos WMO, unidades canônicas e contratos temporais do plano.
+- Lançar `WeatherServiceError` para HTTP não-ok e ausência de `current`/`daily`.
+- Cobrir rede simulada, campos opcionais, cinco dias e erros em
+  `tests/unit/weatherService.test.ts`; validar com `pnpm lint`, `pnpm build`
+  e `pnpm test`. Não concluir os demais critérios das tarefas amplas com base
+  apenas neste recorte.
+- **Evidência do recorte (2026-10-27):** `pnpm exec vitest run
+  tests/unit/weatherService.test.ts` aprovado (23 testes); `pnpm lint`
+  aprovado; `pnpm build` aprovado; `pnpm test` aprovado (76 testes em
+  10 arquivos). As tarefas amplas continuam com seus demais critérios pendentes.
+
 ### T-19 — Implementar controle HTTP
 
 - **ID:** T-19

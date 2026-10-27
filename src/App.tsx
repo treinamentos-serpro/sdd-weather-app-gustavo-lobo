@@ -6,33 +6,21 @@ import EmptyState from './components/states/EmptyState';
 import ErrorState from './components/states/ErrorState';
 import LoadingState from './components/states/LoadingState';
 import UnitToggle from './components/UnitToggle';
-import { mockWeatherData } from './mocks/weather';
+import useWeather from './hooks/useWeather';
 import type { Unit } from './types/weather';
-
-const demoStates = [
-  { value: 'idle', label: 'Inicial' },
-  { value: 'loading', label: 'Carregando' },
-  { value: 'empty', label: 'Sem resultados' },
-  { value: 'error', label: 'Erro' },
-  { value: 'success', label: 'Sucesso' },
-] as const;
-
-type DemoStatus = (typeof demoStates)[number]['value'];
 
 export default function App() {
   const [unit, setUnit] = useState<Unit>('celsius');
-  const [status, setStatus] = useState<DemoStatus>('idle');
-  const [searchTerm, setSearchTerm] = useState('');
+  const { status, data, cities, error, query, search, selectCity, retry } = useWeather();
   const mainRef = useRef<HTMLElement>(null);
-  const data = mockWeatherData;
 
-  function handleSearch(city: string) {
-    setSearchTerm(city);
-    setStatus('success');
+  async function handleRetry() {
+    await retry();
+    mainRef.current?.focus();
   }
 
   function formatTime(instant: string | null): string {
-    if (instant === null) return 'Indisponível';
+    if (instant === null || data === null) return 'Indisponível';
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'short',
       timeStyle: 'short',
@@ -61,75 +49,68 @@ export default function App() {
             </div>
             <UnitToggle unit={unit} onChange={setUnit} />
           </div>
-          <SearchBar onSearch={handleSearch} disabled={status === 'loading'} />
+          <SearchBar onSearch={search} disabled={status === 'loading'} />
         </header>
 
-        <aside aria-label="Demonstração com dados fictícios" className="my-6 space-y-3">
-          <p className="text-sm text-slate-300">
-            Modo demonstração: dados fictícios e fixos de São Paulo, de 27 a 31 de outubro de 2026.
-            Nenhuma busca consulta a API ou altera a cidade do exemplo.
-          </p>
-          {searchTerm && (
-            <p className="text-sm text-slate-300">
-              Busca digitada: {searchTerm}. Exibindo o exemplo.
-            </p>
-          )}
-          <fieldset>
-            <legend className="mb-2 text-sm font-medium">Estado de demonstração</legend>
+        {cities.length > 1 && (
+          <section aria-label="Cidades encontradas" className="my-6">
+            <h2 className="mb-2 text-sm font-medium">Cidades encontradas</h2>
             <div className="flex flex-wrap gap-2">
-              {demoStates.map((state) => (
+              {cities.map((city) => (
                 <button
-                  key={state.value}
+                  key={city.id}
                   type="button"
-                  aria-pressed={status === state.value}
-                  onClick={() => setStatus(state.value)}
+                  disabled={status === 'loading'}
+                  aria-pressed={data?.city.id === city.id}
+                  onClick={() => selectCity(city)}
                   className={`min-h-11 rounded-lg border border-white/10 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-400 ${
-                    status === state.value
+                    data?.city.id === city.id
                       ? 'bg-accent-400 font-semibold text-night-900 underline decoration-2 underline-offset-4'
                       : 'bg-white/5 text-white hover:bg-white/10'
                   }`}
                 >
-                  {state.label}
+                  {[city.name, city.admin1, city.country].filter(Boolean).join(', ')}
                 </button>
               ))}
             </div>
-          </fieldset>
-        </aside>
+          </section>
+        )}
 
         <p aria-live="polite" aria-atomic="true" className="sr-only">
-          {status === 'success'
-            ? `Exemplo de ${data.city.name} disponível com previsão de cinco dias. Temperaturas em ${unit === 'celsius' ? 'Celsius' : 'Fahrenheit'}.`
+          {status === 'success' && data
+            ? `Clima de ${data.city.name} disponível com previsão de cinco dias. Temperaturas em ${unit === 'celsius' ? 'Celsius' : 'Fahrenheit'}.`
             : ''}
         </p>
         <main
           ref={mainRef}
           id="main-content"
           tabIndex={-1}
-          className="space-y-6 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-400"
+          className="mt-6 space-y-6 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-400"
         >
           {status === 'idle' && (
             <EmptyState
               title="Como está o clima por aí?"
-              hint="Digite uma cidade para abrir o exemplo ou escolha um estado de demonstração."
+              hint="Digite o nome de uma cidade para consultar o clima."
             />
           )}
-          {status === 'loading' && <LoadingState message="Consultando o clima (demonstração)…" />}
+          {status === 'loading' && <LoadingState message="Consultando o clima…" />}
           {status === 'empty' && (
             <EmptyState
-              title="Nenhuma cidade encontrada nesta demonstração"
-              hint="Edite a busca ou escolha Sucesso para visualizar os dados fictícios."
+              title="Nenhuma cidade encontrada"
+              hint={
+                query
+                  ? `Nenhum resultado para “${query}”. Tente outra cidade.`
+                  : 'Digite o nome de uma cidade.'
+              }
             />
           )}
           {status === 'error' && (
             <ErrorState
-              message="Não foi possível consultar o clima (erro simulado)."
-              onRetry={() => {
-                setStatus('success');
-                mainRef.current?.focus();
-              }}
+              message={error ?? 'Não foi possível consultar o clima.'}
+              onRetry={handleRetry}
             />
           )}
-          {status === 'success' && (
+          {status === 'success' && data && (
             <>
               <CurrentWeather city={data.city} current={data.current} unit={unit} />
               <div className="space-y-1 text-sm text-slate-300">
@@ -144,11 +125,19 @@ export default function App() {
                 <p>Fuso horário: {data.timezone}</p>
               </div>
               <ForecastList forecast={data.forecast} unit={unit} />
+              {data.issues.length > 0 && (
+                <p role="status" className="text-sm text-slate-300">
+                  Alguns dados meteorológicos estão indisponíveis.
+                </p>
+              )}
             </>
           )}
         </main>
         <footer className="mt-10 border-t border-white/10 pt-4 text-sm text-slate-400">
-          WeatherView · Interface de demonstração · Não utilize estes dados como previsão real.
+          WeatherView · Dados meteorológicos por{' '}
+          <a className="underline" href="https://open-meteo.com/">
+            Open-Meteo
+          </a>
         </footer>
       </div>
     </div>

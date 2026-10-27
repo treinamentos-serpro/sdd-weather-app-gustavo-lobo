@@ -102,6 +102,33 @@ Decisões-chave:
 
 ---
 
+## Serviço Open-Meteo
+
+As operações `searchCities(name): Promise<City[]>` e
+`getWeather(city): Promise<WeatherData>` estão em
+[src/services/weatherService.ts](src/services/weatherService.ts).
+A busca ignora nomes vazios sem acessar a rede e codifica o nome com
+`encodeURIComponent`. O forecast solicita cinco dias, unidades métricas,
+fuso automático e timestamps Unix; normaliza condições WMO e arrays diários
+para os contratos compartilhados. A precipitação atual vem da última hora
+fechada disponível em `hourly`, não do intervalo de 15 minutos de `current`.
+
+Falhas HTTP, de rede, de JSON e ausência de `current` ou `daily` lançam
+`WeatherServiceError`. Medições ausentes permanecem `null`, com problemas
+registrados em `issues`, sem substituí-las por zero.
+
+`fetchWithTimeout` usa `AbortController` com limite de 10 segundos e limpa o
+timer em `finally`. Um `AbortError` vira `WeatherServiceError` com mensagem
+“A requisição demorou demais.”; falhas de rede usam “Falha de rede.”.
+
+O hook [useWeather](src/hooks/useWeather.ts) expõe `status`
+(`idle | loading | success | error | empty`), `data`, `cities`, `error`,
+`query` e as ações assíncronas `search(name)`, `selectCity(city)` e `retry()`.
+`data` e `error` começam como `null`; `cities` começa vazia. A busca carrega
+automaticamente a primeira cidade; lista vazia não inicia forecast.
+Retry repete a busca que falhou ou apenas forecast quando a cidade já foi
+encontrada. Respostas antigas e posteriores à desmontagem são descartadas.
+
 ## Dados fictícios para desenvolver a UI
 
 Os contratos estão em [src/types/weather.ts](src/types/weather.ts). Para desenvolver
@@ -186,24 +213,23 @@ Use mensagens específicas à operação e voltadas ao usuário, sem expor erros
 brutos da API. O componente pai controla qual estado exibir e quando liberar
 uma nova tentativa.
 
-## Executar o layout de demonstração
+## Executar a aplicação integrada
 
 Execute `pnpm dev` e abra a URL indicada pelo Vite. A composição está em
 [App](src/App.tsx), com entrada em [main](src/main.tsx) e estilos globais em
 [index.css](src/index.css).
 
-O estado inicial orienta a busca. Enviar qualquer cidade abre o mock fixo de
-São Paulo — não representa geocodificação nem altera a cidade do exemplo.
-O painel “Estado de demonstração” permite alternar entre inicial, carregando,
-sem resultados, erro e sucesso. O carregamento permanece visível até escolher
-outro estado; “Tentar novamente” abre o sucesso simulado. Não há chamadas à API
-nem atrasos artificiais. Estes controles são exclusivos desta etapa de UI,
-não uma implementação dos fluxos reais de consulta.
+O estado inicial orienta a busca. Enviar uma cidade consulta o geocoding e
+carrega o clima do primeiro resultado. Quando há várias opções, botões com
+nome, região e país permitem selecionar outra cidade. Durante a consulta,
+busca e seleção ficam desabilitadas; ausência de resultados e falhas têm
+mensagens distintas. “Tentar novamente” repete a operação que falhou.
+Não há mock como fallback nem controles de demonstração na aplicação.
 
-A unidade começa em Celsius e permanece no estado de UI ao alternar cenários.
+A unidade começa em Celsius e permanece no estado de UI entre consultas.
 As onze temperaturas são convertidas pelos componentes na renderização, sem
-modificar o mock. Referência meteorológica, consulta e intervalo de precipitação
-são apresentados separadamente no fuso do exemplo.
+alterar os dados nem acessar a rede. Referência meteorológica, consulta e
+intervalo de precipitação são apresentados separadamente no fuso da cidade.
 
 ### Acessibilidade e responsividade
 
@@ -219,8 +245,8 @@ são apresentados separadamente no fuso do exemplo.
   foco sobre painel 6,20:1, texto secundário sobre painel 10,65:1 e texto do
   botão no hover 5,39:1. Emojis dependem da renderização do sistema; a condição
   também é apresentada em texto.
-- Testes E2E cobrem teclado, movimento reduzido e textos de 80 caracteres em
-  320, 375, 640, 768, 1024 e 1440 px. Isso não substitui avaliação com leitor
+- Testes E2E cobrem teclado, movimento reduzido, busca, retry e grid responsivo
+  em 320, 375, 640, 768, 1024 e 1440 px. Isso não substitui avaliação com leitor
   de tela real nem certifica conformidade integral com WCAG.
 
 ## Stack

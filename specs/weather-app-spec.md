@@ -12,6 +12,24 @@ Esta especificação define o escopo funcional, mas não está pronta para aprov
 
 ## Functional Requirements
 
+### Recorte aprovado para o serviço de integração
+
+As operações `searchCities(name): Promise<City[]>` e
+`getWeather(city): Promise<WeatherData>` serão implementadas em
+`src/services/weatherService.ts`. Neste recorte, por solicitação explícita,
+ausência de `current` ou `daily` é resposta incompleta e lança
+`WeatherServiceError`, em vez de sucesso parcial entre blocos. Campos
+meteorológicos individuais ausentes continuam anuláveis. Busca vazia não
+acessa a rede; o nome é codificado com `encodeURIComponent`.
+
+No recorte de integração solicitado, a busca carrega automaticamente o clima
+da primeira cidade encontrada (substitui a seleção obrigatória de FR-02/CA-02b
+neste fluxo). As demais cidades continuam disponíveis para seleção manual.
+O hook expõe um status único (`idle`, `loading`, `success`, `error`, `empty`),
+dados, cidades, erro, termo e ações de busca, seleção e nova tentativa.
+Falhas podem ser repetidas manualmente na operação que falhou: busca por nome
+ou consulta da cidade já encontrada. Requisições têm timeout de 10 segundos.
+
 - **FR-01 — Buscar cidades:** permitir pesquisar cidades pelo nome usando o serviço de geocodificação da Open-Meteo. Não enviar consulta se o campo estiver vazio ou contiver apenas espaços; preservar letras acentuadas, espaços internos, hífens e apóstrofos no termo enviado.
 - **FR-02 — Identificar e selecionar cidade:** apresentar os dados geográficos fornecidos pela Open-Meteo para distinguir localidades homônimas e permitir seleção explícita. Não selecionar automaticamente um resultado quando houver mais de uma opção ou não houver contexto suficiente para distingui-las.
 - **FR-03 — Consultar clima atual:** exibir temperatura em °C/°F, condição meteorológica mapeada para texto pt-BR e ícone, umidade relativa em %, velocidade do vento em km/h, pressão ao nível da superfície em hPa e precipitação da hora anterior em mm para a cidade selecionada. Arredondar temperatura, vento e precipitação para uma casa decimal; umidade e pressão para o inteiro mais próximo.
